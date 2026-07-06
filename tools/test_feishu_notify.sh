@@ -78,6 +78,8 @@ summary = {
         "log_path": "N/A",
     },
     "metrics": {},
+    "metrics_source": "none",
+    "adapter_status": "not_applicable",
     "log_tail": ["Smoke test - no real log output."],
     "traceback": [],
     "analysis": {
