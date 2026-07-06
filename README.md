@@ -98,20 +98,20 @@ bash init_research_project.sh
 
 # 3. Add local paper PDF
 mkdir -p papers
-cp /path/to/paper.pdf papers/paper.pdf
+cp /path/to/paper.pdf papers/
 
 # 4. Create local paper context template
 ./tools/init_paper_context.sh
 
 # 5. Ask your Agent to fill PAPER_CONTEXT.md based on:
-# - papers/paper.pdf
+# - papers/*.pdf
 # - README.md
 # - train.py / main.py
 # - configs/
 # - scripts/
 ```
 
-`papers/paper.pdf` and `PAPER_CONTEXT.md` are local context files and are ignored by Git. This workflow only gives the Agent paper context before code changes; it is not a knowledge base and does not parse PDFs automatically.
+Files under `papers/` and `PAPER_CONTEXT.md` are local context files and are ignored by Git. This workflow only gives the Agent paper context before code changes; it is not a knowledge base and does not parse PDFs automatically.
 
 ## Release Usage
 

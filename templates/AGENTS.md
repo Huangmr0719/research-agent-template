@@ -32,7 +32,7 @@ This repository uses the Research-Code-Agent workflow.
 
 ## Paper Context
 
-- If `papers/paper.pdf` exists, read it before designing experiments or changing code, along with `README.md`, training entrypoints, `configs/`, and `scripts/`.
+- If paper PDFs exist under `papers/`, read them before designing experiments or changing code, along with `README.md`, training entrypoints, `configs/`, and `scripts/`.
 - Use `templates/PAPER_CONTEXT_TEMPLATE.md` to create or update `PAPER_CONTEXT.md`.
 - Keep `PAPER_CONTEXT.md` minimal: research problem, core method, key modules, datasets/metrics, main experiments/ablation, training entrypoints, and next experiment ideas.
 - Do not create multiple paper-planning documents unless the user asks.

@@ -119,7 +119,6 @@ main() {
     exit 0
   fi
 
-  backup_if_exists "$TARGET_DIR/tools"
   backup_if_exists "$TARGET_DIR/AGENTS.md"
   backup_if_exists "$TARGET_DIR/README_AGENT_WORKFLOW.md"
 
@@ -158,7 +157,7 @@ main() {
 Next step: run ./tools/test_feishu_notify.sh to verify Feishu notification.
 
 Optional paper context:
-  1. Put the paper at papers/paper.pdf
+  1. Put the paper PDF under papers/
   2. Run ./tools/init_paper_context.sh
   3. Ask your Agent to fill PAPER_CONTEXT.md based on the paper, README, and code.
 

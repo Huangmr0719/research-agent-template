@@ -9,6 +9,11 @@ PAPER_CONTEXT.md
 logs/
 outputs/
 
+# Local release artifacts
+release-build/
+research-code-agent-*.tar.gz
+SHA256SUMS
+
 # Experiment data
 experiments/
 # experiments/runs/

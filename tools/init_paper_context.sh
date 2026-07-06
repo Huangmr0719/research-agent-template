@@ -19,10 +19,23 @@ fi
 mkdir -p "$PROJECT_DIR/papers"
 
 if [[ ! -f "$PAPER_PATH" ]]; then
-  cat <<EOF
+  shopt -s nullglob
+  pdfs=("$PROJECT_DIR"/papers/*.pdf)
+  shopt -u nullglob
+  if [[ "${#pdfs[@]}" -eq 1 ]]; then
+    log "Found paper PDF: papers/$(basename "${pdfs[0]}")"
+  elif [[ "${#pdfs[@]}" -gt 1 ]]; then
+    cat <<EOF
+Multiple PDF files found under papers/.
+Use the intended paper as:
+papers/paper.pdf
+EOF
+  else
+    cat <<EOF
 Please place the paper PDF at:
 papers/paper.pdf
 EOF
+  fi
 fi
 
 if [[ -f "$CONTEXT_PATH" ]]; then
