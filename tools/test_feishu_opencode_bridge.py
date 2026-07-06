@@ -45,7 +45,7 @@ class MockOpenCode(bridge.OpenCodeClient):
             self.abort_session(session_id)
             raise bridge.OpenCodeTimeoutError("timeout")
         if self.mode == "empty":
-            return "OpenCode 已完成，但未返回文本输出。"
+            return bridge.DISPLAY_TEXT_FALLBACK
         if self.mode == "long":
             return "abcdefghi"
         return "ok"
@@ -110,7 +110,7 @@ async def main():
             for item in channel.sent
             if item[2].get("reply_to") == "m4" and item[1]["markdown"] != "收到，处理中。"
         )
-        assert "未返回文本输出" in m4_text
+        assert bridge.DISPLAY_TEXT_FALLBACK in m4_text
 
         mock.mode = "timeout"
         await app.handle_message(MockMessage("m5", chat_id="chat4"))
@@ -123,6 +123,23 @@ async def main():
             assert any(item[1]["markdown"] == "busy" for item in channel.sent)
         finally:
             lock.release()
+
+        extractor = bridge.OpenCodeClient(config)
+        assert extractor.extract_text_from_parts(
+            [
+                {"type": "reasoning", "text": "hidden chain of thought"},
+                {"type": "text", "text": "visible answer"},
+            ]
+        ) == "visible answer"
+        assert extractor.extract_text_from_parts(
+            [{"type": "reasoning", "text": "hidden chain of thought"}]
+        ) == bridge.DISPLAY_TEXT_FALLBACK
+        assert extractor.extract_text_from_parts(
+            [{"type": "tool_result", "content": "secret tool output"}]
+        ) == bridge.DISPLAY_TEXT_FALLBACK
+        assert extractor.extract_text_from_parts(
+            [{"unexpected": {"nested": "do not dump me"}}]
+        ) == bridge.DISPLAY_TEXT_FALLBACK
 
     print("feishu opencode bridge tests passed")
 

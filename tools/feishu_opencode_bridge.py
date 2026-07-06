@@ -32,6 +32,7 @@ DEFAULT_ACK = "收到，处理中。"
 DEFAULT_BUSY = "当前会话已有任务处理中，请稍后再试。"
 DEFAULT_UNAVAILABLE = "OpenCode 调用失败，请查看 bridge 日志。"
 DEFAULT_TIMEOUT = "处理超时，已尝试中止当前 OpenCode 会话任务，请到服务器检查日志。"
+DISPLAY_TEXT_FALLBACK = "OpenCode 已完成处理，但没有返回可展示文本。"
 DEFAULT_SYSTEM_PROMPT = (
     "你是 Research-Code-Agent 远程助手。你运行在用户的科研代码服务器上。"
     "你只根据当前项目文件和用户消息工作；不要编造执行结果。"
@@ -326,7 +327,7 @@ class OpenCodeClient:
         text = self.extract_text_from_response(data)
         if text:
             return text
-        return self.extract_text_from_messages(self.list_messages(session_id, limit=5)) or "OpenCode 已完成，但未返回文本输出。"
+        return self.extract_text_from_messages(self.list_messages(session_id, limit=5))
 
     def abort_session(self, session_id: str) -> bool:
         try:
@@ -379,32 +380,39 @@ class OpenCodeClient:
             if text:
                 texts.append(text)
         output = "\n\n".join(texts).strip()
-        return output
+        return output or DISPLAY_TEXT_FALLBACK
 
     def extract_text_from_parts(self, parts: Any) -> str:
         if not isinstance(parts, list):
-            return ""
+            return DISPLAY_TEXT_FALLBACK
+        display_types = {"text", "message", "assistant_text"}
+        hidden_types = {
+            "reasoning",
+            "thinking",
+            "thought",
+            "tool",
+            "tool_call",
+            "tool_result",
+            "step",
+            "system",
+            "debug",
+            "internal",
+        }
         texts: list[str] = []
         for part in parts:
             if not isinstance(part, dict):
                 continue
-            if part.get("error"):
-                texts.append("Error: " + json.dumps(part["error"], ensure_ascii=False))
+            part_type = str(part.get("type", "")).lower()
+            if part_type in hidden_types:
                 continue
-            for key in ("text", "content", "message", "result"):
+            if part_type not in display_types:
+                continue
+            for key in ("text", "content"):
                 value = part.get(key)
                 if isinstance(value, str) and value.strip():
                     texts.append(value.strip())
                     break
-            else:
-                state = part.get("state")
-                if isinstance(state, dict):
-                    for key in ("output", "text", "content", "error"):
-                        value = state.get(key)
-                        if isinstance(value, str) and value.strip():
-                            texts.append(value.strip())
-                            break
-        return "\n".join(texts).strip()
+        return "\n".join(texts).strip() or DISPLAY_TEXT_FALLBACK
 
     def _unwrap_data(self, data: Any) -> Any:
         if isinstance(data, dict) and "data" in data:
