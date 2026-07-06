@@ -126,7 +126,7 @@ def write_markdown(path: Path, summary: Dict[str, Any]) -> None:
     analysis = summary.get("analysis") or {}
     metric_lines = "\n".join(f"- {key}: {value}" for key, value in sorted(metrics.items())) or "- No metrics found"
     tail_lines = "\n".join(summary.get("log_tail") or [])
-    analysis_summary = analysis.get("concise_summary", "Agent analysis pending.")
+    analysis_summary = analysis.get("concise_summary", "Agent 分析待生成。")
     note = summary.get("note") or "未填写"
 
     content = f"""# Experiment Summary: {summary['experiment_name']}
@@ -209,7 +209,7 @@ def main() -> int:
         "log_tail": extract_log_tail(log_text),
         "traceback": extract_traceback(log_text),
         "analysis": {
-            "concise_summary": "Agent analysis pending.",
+            "concise_summary": "Agent 分析待生成。",
             "evidence": [],
             "possible_causes": [],
             "next_steps": [],

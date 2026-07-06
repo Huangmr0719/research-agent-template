@@ -20,24 +20,18 @@ STATUS_META = {
     "success": {
         "title": "✅ 实验完成",
         "color": "green",
-        "summary": "实验已成功完成。",
+        "label": "成功",
     },
     "failed": {
         "title": "❌ 实验失败",
         "color": "red",
-        "summary": "实验以非零状态退出，请优先查看折叠日志摘要。",
+        "label": "失败",
     },
     "interrupted": {
         "title": "⚠️ 实验中断",
         "color": "orange",
-        "summary": "实验在完成前中断，请查看中断前日志是否有异常。",
+        "label": "中断",
     },
-}
-
-STATUS_LABELS = {
-    "success": "成功",
-    "failed": "失败",
-    "interrupted": "中断",
 }
 
 METRIC_ORDER = [
@@ -57,6 +51,7 @@ MAX_TAIL_CHARS = 5000
 MAX_COMMAND_CHARS = 1000
 MAX_PATH_CHARS = 240
 MAX_NOTE_CHARS = 600
+UNAVAILABLE_ANALYSIS = "Agent 分析不可用。请查看 facts 和 log tail。"
 
 
 def load_json(path: Optional[str]) -> Dict[str, Any]:
@@ -87,6 +82,14 @@ def fallback(value: Any, default: str = "unknown") -> str:
         return default
     text = str(value).strip()
     return text if text else default
+
+
+def first_present(*values: Any, default: str = "unknown") -> str:
+    for value in values:
+        text = fallback(value, "")
+        if text:
+            return text
+    return default
 
 
 def truncate(text: str, limit: int) -> str:
@@ -122,15 +125,11 @@ def flatten_metrics(metrics: Any) -> Dict[str, Any]:
     return metrics
 
 
-def metric_lookup(metrics: Dict[str, Any]) -> Dict[str, Any]:
-    return {str(key).lower(): value for key, value in metrics.items()}
-
-
 def ordered_metrics(metrics: Dict[str, Any]) -> List[Tuple[str, Any]]:
     if not metrics:
         return []
 
-    lookup = metric_lookup(metrics)
+    lookup = {str(key).lower(): value for key, value in metrics.items()}
     result = []
     seen = set()
     for label, aliases in METRIC_ORDER:
@@ -199,14 +198,14 @@ def join_tail(value: Any) -> str:
 def normalize_analysis(value: Any) -> Dict[str, Any]:
     if not isinstance(value, dict):
         return {
-            "concise_summary": "Agent 分析不可用。请查看 facts 和 log tail。",
+            "concise_summary": UNAVAILABLE_ANALYSIS,
             "evidence": [],
             "possible_causes": [],
             "next_steps": [],
             "confidence": "low",
         }
     return {
-        "concise_summary": fallback(value.get("concise_summary"), "Agent 分析不可用。请查看 facts 和 log tail。"),
+        "concise_summary": fallback(value.get("concise_summary"), UNAVAILABLE_ANALYSIS),
         "evidence": value.get("evidence") if isinstance(value.get("evidence"), list) else [],
         "possible_causes": value.get("possible_causes") if isinstance(value.get("possible_causes"), list) else [],
         "next_steps": value.get("next_steps") if isinstance(value.get("next_steps"), list) else [],
@@ -226,29 +225,29 @@ def load_payload_data(args: argparse.Namespace) -> Dict[str, Any]:
     summary = load_json(args.summary)
     facts = summary.get("facts") if isinstance(summary.get("facts"), dict) else {}
     metrics = flatten_metrics(summary.get("metrics") or metadata.get("metrics"))
-    status = fallback(summary.get("status") or facts.get("status") or args.status)
+    status = first_present(summary.get("status"), facts.get("status"), args.status)
     if status not in STATUS_META:
         status = args.status
     analysis = normalize_analysis(summary.get("analysis"))
     log_tail = join_tail(summary.get("log_tail")) or read_text(args.tail_log)
-    note = fallback(summary.get("note") or metadata.get("note"), "未填写")
+    note = first_present(summary.get("note"), metadata.get("note"), default="未填写")
     summary_path = fallback(args.summary, "unknown")
     return {
         "name": args.name,
         "note": note,
         "status": status,
-        "status_label": STATUS_LABELS.get(status, status),
+        "status_label": STATUS_META[status].get("label", status),
         "title": f"{STATUS_META[status]['title']} | {args.name}",
         "color": STATUS_META[status]["color"],
-        "host": fallback(facts.get("host") or metadata.get("host")),
-        "git_commit": fallback(facts.get("git_commit") or metadata.get("git_commit")),
-        "command": fallback(facts.get("command") or metadata.get("command")),
-        "start_time": fallback(facts.get("start_time") or metadata.get("start_time")),
-        "end_time": fallback(facts.get("end_time") or metadata.get("end_time")),
-        "duration": fallback(facts.get("duration") or format_duration(metadata.get("duration_seconds"))),
-        "exit_code": fallback(facts.get("exit_code") or metadata.get("exit_code")),
-        "signal": fallback(facts.get("signal") or metadata.get("signal")),
-        "log_path": fallback(facts.get("log_path") or metadata.get("log_path")),
+        "host": first_present(facts.get("host"), metadata.get("host")),
+        "git_commit": first_present(facts.get("git_commit"), metadata.get("git_commit")),
+        "command": first_present(facts.get("command"), metadata.get("command")),
+        "start_time": first_present(facts.get("start_time"), metadata.get("start_time")),
+        "end_time": first_present(facts.get("end_time"), metadata.get("end_time")),
+        "duration": first_present(facts.get("duration"), format_duration(metadata.get("duration_seconds"))),
+        "exit_code": first_present(facts.get("exit_code"), metadata.get("exit_code")),
+        "signal": first_present(facts.get("signal"), metadata.get("signal")),
+        "log_path": first_present(facts.get("log_path"), metadata.get("log_path")),
         "summary_path": summary_path,
         "metrics": ordered_metrics(metrics),
         "analysis": analysis,
