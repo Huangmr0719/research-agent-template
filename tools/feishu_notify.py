@@ -17,9 +17,21 @@ from typing import Any, Dict, List, Optional, Tuple
 
 
 STATUS_META = {
-    "success": {"title": "✅ 实验完成", "color": "green"},
-    "failed": {"title": "❌ 实验失败", "color": "red"},
-    "interrupted": {"title": "⚠️ 实验中断", "color": "orange"},
+    "success": {
+        "title": "✅ 实验完成",
+        "color": "green",
+        "summary": "Run completed successfully.",
+    },
+    "failed": {
+        "title": "❌ 实验失败",
+        "color": "red",
+        "summary": "Run exited with a non-zero status. Review the folded log tail before rerunning.",
+    },
+    "interrupted": {
+        "title": "⚠️ 实验中断",
+        "color": "orange",
+        "summary": "Run stopped before completion, usually from SIGINT, SIGTERM, or manual cancellation.",
+    },
 }
 
 METRIC_ORDER = [
@@ -35,8 +47,9 @@ METRIC_ORDER = [
 
 MAX_TAIL_LINES = 80
 MAX_TAIL_LINE_CHARS = 300
-MAX_TAIL_CHARS = 6000
+MAX_TAIL_CHARS = 5000
 MAX_COMMAND_CHARS = 1000
+MAX_PATH_CHARS = 240
 
 
 def load_json(path: Optional[str]) -> Dict[str, Any]:
@@ -73,6 +86,11 @@ def truncate(text: str, limit: int) -> str:
     if len(text) <= limit:
         return text
     return text[: max(0, limit - 18)].rstrip() + " ... [truncated]"
+
+
+def code_block(text: str, language: str = "text") -> str:
+    safe_text = text.replace("```", "'''")
+    return f"```{language}\n{safe_text}\n```"
 
 
 def format_duration(seconds: Any) -> str:
@@ -141,6 +159,17 @@ def fields(items: List[Tuple[str, str]]) -> List[Dict[str, Any]]:
     ]
 
 
+def section_title(title: str) -> Dict[str, Any]:
+    return {
+        "tag": "div",
+        "text": lark_md(f"**{title}**"),
+    }
+
+
+def subdued(text: str) -> str:
+    return f"<font color='grey'>{text}</font>"
+
+
 def sanitize_tail(tail_log: str) -> str:
     if not tail_log.strip():
         return "No log tail captured."
@@ -163,6 +192,7 @@ def load_payload_data(args: argparse.Namespace) -> Dict[str, Any]:
         "status": args.status,
         "title": f"{STATUS_META[args.status]['title']} | {args.name}",
         "color": STATUS_META[args.status]["color"],
+        "summary": STATUS_META[args.status]["summary"],
         "host": fallback(metadata.get("host")),
         "git_commit": fallback(metadata.get("git_commit")),
         "command": fallback(metadata.get("command")),
@@ -182,6 +212,9 @@ def build_text_message(data: Dict[str, Any], include_tail: bool) -> str:
         f"Status: {data['status']}",
         f"Duration: {data['duration']}",
         f"Host: {data['host']}",
+        "",
+        "Overview:",
+        f"- Summary: {data['summary']}",
         "",
         "Meta:",
         f"- Git Commit: {data['git_commit']}",
@@ -210,13 +243,20 @@ def build_card(data: Dict[str, Any], include_tail: bool) -> Dict[str, Any]:
     if not metric_fields:
         metric_block = {
             "tag": "div",
-            "text": lark_md("**Metrics**\nNo metrics found"),
+            "text": lark_md(subdued("No metrics found")),
         }
     else:
         metric_block = {"tag": "div", "fields": metric_fields}
 
     command = truncate(data["command"], MAX_COMMAND_CHARS)
+    log_path = truncate(data["log_path"], MAX_PATH_CHARS)
     elements: List[Dict[str, Any]] = [
+        {
+            "tag": "div",
+            "text": lark_md(data["summary"]),
+        },
+        {"tag": "hr"},
+        section_title("Run Overview"),
         {
             "tag": "div",
             "fields": fields(
@@ -228,6 +268,7 @@ def build_card(data: Dict[str, Any], include_tail: bool) -> Dict[str, Any]:
             ),
         },
         {"tag": "hr"},
+        section_title("Meta"),
         {
             "tag": "div",
             "fields": fields(
@@ -235,12 +276,12 @@ def build_card(data: Dict[str, Any], include_tail: bool) -> Dict[str, Any]:
                     ("Git Commit", data["git_commit"]),
                     ("Start Time", data["start_time"]),
                     ("End Time", data["end_time"]),
-                    ("Log Path", data["log_path"]),
+                    ("Log Path", log_path),
                 ]
             ),
         },
         {"tag": "hr"},
-        {"tag": "div", "text": lark_md("**Core Metrics**")},
+        section_title("Core Metrics"),
         metric_block,
     ]
 
@@ -257,7 +298,11 @@ def build_card(data: Dict[str, Any], include_tail: bool) -> Dict[str, Any]:
                     "elements": [
                         {
                             "tag": "div",
-                            "text": lark_md(f"```text\n{data['tail_log']}\n```"),
+                            "text": lark_md(
+                                subdued("Folded by default. Full log path is listed in Meta.")
+                                + "\n"
+                                + code_block(data["tail_log"])
+                            ),
                         }
                     ],
                 },
@@ -269,7 +314,7 @@ def build_card(data: Dict[str, Any], include_tail: bool) -> Dict[str, Any]:
             {"tag": "hr"},
             {
                 "tag": "div",
-                "text": lark_md(f"<font color='grey'>Command</font>\n```bash\n{command}\n```"),
+                "text": lark_md(subdued("Command") + "\n" + code_block(command, "bash")),
             },
         ]
     )
