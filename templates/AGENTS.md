@@ -30,6 +30,15 @@ This repository uses the Research-Code-Agent workflow.
 - If metrics are missing, check `tools/project_results_adapter.py` before expanding log parsing.
 - Compare output is an experiment artifact and should not be committed unless the user explicitly asks.
 
+## Paper Context
+
+- If `papers/paper.pdf` exists, read it before designing experiments or changing code, along with `README.md`, training entrypoints, `configs/`, and `scripts/`.
+- Use `templates/PAPER_CONTEXT_TEMPLATE.md` to create or update `PAPER_CONTEXT.md`.
+- Keep `PAPER_CONTEXT.md` minimal: research problem, core method, key modules, datasets/metrics, main experiments/ablation, training entrypoints, and next experiment ideas.
+- Do not create multiple paper-planning documents unless the user asks.
+- Do not commit `papers/` or `PAPER_CONTEXT.md`.
+- Do not automatically parse PDFs or add PDF parsing dependencies unless the user explicitly asks.
+
 ## Do Not Commit
 
 - `papers/`

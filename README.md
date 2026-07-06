@@ -9,6 +9,7 @@
 - log capture
 - summary.json / summary.md
 - summary-based experiment comparison
+- minimal paper context workflow
 - on-demand OpenCode analysis
 - project_results_adapter（项目级 metrics 适配）
 - toy success / failed / interrupted tests
@@ -52,10 +53,14 @@ tools/
   summarize_experiment.py
   analyze_with_agent.py
   compare_experiments.py
+  init_paper_context.sh
   project_results_adapter.py
   test_feishu_notify.sh
+templates/
+  PAPER_CONTEXT_TEMPLATE.md
 logs/
 outputs/
+papers/
 experiments/
   summaries/
   runs/
@@ -81,6 +86,49 @@ bash init_research_project.sh
 ./tools/run_with_feishu_notify.sh --name toy_success --note "toy success notification check" -- bash examples/toy_success.sh
 ./tools/run_with_feishu_notify.sh --name toy_failed -- bash examples/toy_failed.sh
 ```
+
+## Minimal Paper-Aware Workflow
+
+```bash
+# 1. Initialize Research-Code-Agent
+bash init_research_project.sh
+
+# 2. Verify Feishu notification
+./tools/test_feishu_notify.sh
+
+# 3. Add local paper PDF
+mkdir -p papers
+cp /path/to/paper.pdf papers/paper.pdf
+
+# 4. Create local paper context template
+./tools/init_paper_context.sh
+
+# 5. Ask your Agent to fill PAPER_CONTEXT.md based on:
+# - papers/paper.pdf
+# - README.md
+# - train.py / main.py
+# - configs/
+# - scripts/
+```
+
+`papers/paper.pdf` and `PAPER_CONTEXT.md` are local context files and are ignored by Git. This workflow only gives the Agent paper context before code changes; it is not a knowledge base and does not parse PDFs automatically.
+
+## Release Usage
+
+Research-Code-Agent is the tool development repository. Do not `git clone` it into each baseline project.
+
+Recommended baseline setup is via GitHub Release tarball:
+
+```bash
+wget https://github.com/Huangmr0719/Research-Code-Agent/releases/latest/download/research-code-agent.tar.gz
+tar -xzf research-code-agent.tar.gz
+bash research-code-agent/init_research_project.sh
+rm -rf research-code-agent research-code-agent.tar.gz
+```
+
+The baseline project should only keep the initialized files such as `tools/`, `templates/`, `AGENTS.md`, `README_AGENT_WORKFLOW.md`, and ignore rules. Do not leave a nested `Research-Code-Agent/.git` in the baseline project.
+
+Current development repository may still be named `research-agent-template`. The recommended future GitHub repository name is `Research-Code-Agent`; release package directory name should be `research-code-agent`.
 
 ## Run An Experiment
 
