@@ -20,18 +20,24 @@ STATUS_META = {
     "success": {
         "title": "✅ 实验完成",
         "color": "green",
-        "summary": "Run completed successfully.",
+        "summary": "实验已成功完成。",
     },
     "failed": {
         "title": "❌ 实验失败",
         "color": "red",
-        "summary": "Run exited with a non-zero status. Review the folded log tail before rerunning.",
+        "summary": "实验以非零状态退出，请优先查看折叠日志摘要。",
     },
     "interrupted": {
         "title": "⚠️ 实验中断",
         "color": "orange",
-        "summary": "Run stopped before completion, usually from SIGINT, SIGTERM, or manual cancellation.",
+        "summary": "实验在完成前中断，请查看中断前日志是否有异常。",
     },
+}
+
+STATUS_LABELS = {
+    "success": "成功",
+    "failed": "失败",
+    "interrupted": "中断",
 }
 
 METRIC_ORDER = [
@@ -50,6 +56,7 @@ MAX_TAIL_LINE_CHARS = 300
 MAX_TAIL_CHARS = 5000
 MAX_COMMAND_CHARS = 1000
 MAX_PATH_CHARS = 240
+MAX_NOTE_CHARS = 600
 
 
 def load_json(path: Optional[str]) -> Dict[str, Any]:
@@ -172,15 +179,15 @@ def subdued(text: str) -> str:
 
 def sanitize_tail(tail_log: str) -> str:
     if not tail_log.strip():
-        return "No log tail captured."
+        return "未捕获到日志摘要。"
 
     raw_lines = tail_log.splitlines()[-MAX_TAIL_LINES:]
     lines = [truncate(line, MAX_TAIL_LINE_CHARS) for line in raw_lines]
     content = "\n".join(lines).strip()
     if len(content) > MAX_TAIL_CHARS:
         content = truncate(content, MAX_TAIL_CHARS)
-        content += "\n\n[Card log tail shortened. See full log path above.]"
-    return content or "No log tail captured."
+        content += "\n\n[卡片日志摘要已截断，请查看完整 log path。]"
+    return content or "未捕获到日志摘要。"
 
 
 def join_tail(value: Any) -> str:
@@ -192,14 +199,14 @@ def join_tail(value: Any) -> str:
 def normalize_analysis(value: Any) -> Dict[str, Any]:
     if not isinstance(value, dict):
         return {
-            "concise_summary": "Agent analysis unavailable. See facts and log tail.",
+            "concise_summary": "Agent 分析不可用。请查看 facts 和 log tail。",
             "evidence": [],
             "possible_causes": [],
             "next_steps": [],
             "confidence": "low",
         }
     return {
-        "concise_summary": fallback(value.get("concise_summary"), "Agent analysis unavailable. See facts and log tail."),
+        "concise_summary": fallback(value.get("concise_summary"), "Agent 分析不可用。请查看 facts 和 log tail。"),
         "evidence": value.get("evidence") if isinstance(value.get("evidence"), list) else [],
         "possible_causes": value.get("possible_causes") if isinstance(value.get("possible_causes"), list) else [],
         "next_steps": value.get("next_steps") if isinstance(value.get("next_steps"), list) else [],
@@ -219,14 +226,18 @@ def load_payload_data(args: argparse.Namespace) -> Dict[str, Any]:
     summary = load_json(args.summary)
     facts = summary.get("facts") if isinstance(summary.get("facts"), dict) else {}
     metrics = flatten_metrics(summary.get("metrics") or metadata.get("metrics"))
-    status = fallback(facts.get("status") or args.status)
+    status = fallback(summary.get("status") or facts.get("status") or args.status)
     if status not in STATUS_META:
         status = args.status
     analysis = normalize_analysis(summary.get("analysis"))
     log_tail = join_tail(summary.get("log_tail")) or read_text(args.tail_log)
+    note = fallback(summary.get("note") or metadata.get("note"), "未填写")
+    summary_path = fallback(args.summary, "unknown")
     return {
         "name": args.name,
+        "note": note,
         "status": status,
+        "status_label": STATUS_LABELS.get(status, status),
         "title": f"{STATUS_META[status]['title']} | {args.name}",
         "color": STATUS_META[status]["color"],
         "host": fallback(facts.get("host") or metadata.get("host")),
@@ -238,6 +249,7 @@ def load_payload_data(args: argparse.Namespace) -> Dict[str, Any]:
         "exit_code": fallback(facts.get("exit_code") or metadata.get("exit_code")),
         "signal": fallback(facts.get("signal") or metadata.get("signal")),
         "log_path": fallback(facts.get("log_path") or metadata.get("log_path")),
+        "summary_path": summary_path,
         "metrics": ordered_metrics(metrics),
         "analysis": analysis,
         "tail_log": sanitize_tail(log_tail),
@@ -248,52 +260,59 @@ def build_text_message(data: Dict[str, Any], include_tail: bool) -> str:
     lines = [
         data["title"],
         "",
-        f"Status: {data['status']}",
-        f"Duration: {data['duration']}",
-        f"Host: {data['host']}",
+        "实验备注:",
+        truncate(data["note"], MAX_NOTE_CHARS),
         "",
-        "Overview:",
-        f"- Exit code: {data['exit_code']}",
-        f"- Signal: {data['signal']}",
+        "运行概览:",
+        f"- 状态: {data['status_label']}",
+        f"- 耗时: {data['duration']}",
+        f"- 主机: {data['host']}",
+        f"- git commit: {data['git_commit']}",
+        f"- exit code: {data['exit_code']}",
+        f"- signal: {data['signal']}",
+        f"- 开始时间: {data['start_time']}",
+        f"- 结束时间: {data['end_time']}",
         "",
-        "Run Facts:",
-        f"- Git Commit: {data['git_commit']}",
-        f"- Start Time: {data['start_time']}",
-        f"- End Time: {data['end_time']}",
-        f"- Log Path: {data['log_path']}",
-        "",
-        "Metrics:",
+        "核心指标:",
     ]
 
     if data["metrics"]:
         for label, value in data["metrics"]:
             lines.append(f"- {label}: {value}")
     else:
-        lines.append("- No metrics found")
+        lines.append("- 未提取到核心指标")
 
     analysis = data["analysis"]
     lines.extend(
         [
             "",
-            "Agent Analysis:",
-            f"- Summary: {analysis['concise_summary']}",
-            f"- Confidence: {analysis['confidence']}",
+            "Agent 分析:",
+            f"- 结论: {analysis['concise_summary']}",
+            f"- 置信度: {analysis['confidence']}",
         ]
     )
     if analysis["evidence"]:
-        lines.append("- Evidence:")
+        lines.append("- 依据:")
         lines.extend(f"  - {item}" for item in analysis["evidence"])
     if analysis["possible_causes"]:
-        lines.append("- Possible causes:")
+        lines.append("- 可能原因:")
         lines.extend(f"  - {item}" for item in analysis["possible_causes"])
     if analysis["next_steps"]:
-        lines.append("- Next steps:")
+        lines.append("- 下一步建议:")
         lines.extend(f"  - {item}" for item in analysis["next_steps"])
 
     if include_tail:
-        lines.extend(["", "Log Tail (last 80 lines):", data["tail_log"]])
+        lines.extend(["", "日志摘要（最后 80 行）:", data["tail_log"]])
 
-    lines.extend(["", "Command:", data["command"]])
+    lines.extend(
+        [
+            "",
+            "运行命令:",
+            f"- Command: {data['command']}",
+            f"- Log Path: {data['log_path']}",
+            f"- Summary Path: {data['summary_path']}",
+        ]
+    )
     return "\n".join(lines)
 
 
@@ -302,54 +321,52 @@ def build_card(data: Dict[str, Any], include_tail: bool) -> Dict[str, Any]:
     if not metric_fields:
         metric_block = {
             "tag": "div",
-            "text": lark_md(subdued("No metrics found")),
+            "text": lark_md(subdued("未提取到核心指标")),
         }
     else:
         metric_block = {"tag": "div", "fields": metric_fields}
 
     command = truncate(data["command"], MAX_COMMAND_CHARS)
     log_path = truncate(data["log_path"], MAX_PATH_CHARS)
+    summary_path = truncate(data["summary_path"], MAX_PATH_CHARS)
+    note = truncate(data["note"], MAX_NOTE_CHARS)
     analysis = data["analysis"]
     elements: List[Dict[str, Any]] = [
-        section_title("Run Facts"),
+        section_title("实验备注"),
+        {
+            "tag": "div",
+            "text": lark_md(note),
+        },
+        {"tag": "hr"},
+        section_title("运行概览"),
         {
             "tag": "div",
             "fields": fields(
                 [
-                    ("Status", data["status"]),
-                    ("Duration", data["duration"]),
-                    ("Host", data["host"]),
-                    ("Exit Code", data["exit_code"]),
-                    ("Signal", data["signal"]),
-                    ("Git Commit", data["git_commit"]),
+                    ("状态", data["status_label"]),
+                    ("耗时", data["duration"]),
+                    ("主机", data["host"]),
+                    ("git commit", data["git_commit"]),
+                    ("exit code", data["exit_code"]),
+                    ("signal", data["signal"]),
+                    ("开始时间", data["start_time"]),
+                    ("结束时间", data["end_time"]),
                 ]
             ),
         },
         {"tag": "hr"},
-        section_title("Meta"),
-        {
-            "tag": "div",
-            "fields": fields(
-                [
-                    ("Start Time", data["start_time"]),
-                    ("End Time", data["end_time"]),
-                    ("Log Path", log_path),
-                ]
-            ),
-        },
-        {"tag": "hr"},
-        section_title("Metrics"),
+        section_title("核心指标"),
         metric_block,
         {"tag": "hr"},
-        section_title("Agent Analysis"),
+        section_title("Agent 分析"),
         {
             "tag": "div",
             "text": lark_md(
-                f"**Summary**\n{analysis['concise_summary']}\n\n"
-                f"**Evidence**\n{bullet_list(analysis['evidence'])}\n\n"
-                f"**Possible Causes**\n{bullet_list(analysis['possible_causes'], 'Not applicable')}\n\n"
-                f"**Next Steps**\n{bullet_list(analysis['next_steps'])}\n\n"
-                f"{subdued('Confidence: ' + analysis['confidence'])}"
+                f"**结论**\n{analysis['concise_summary']}\n\n"
+                f"**依据**\n{bullet_list(analysis['evidence'], '现有信息不足以判断')}\n\n"
+                f"**可能原因**\n{bullet_list(analysis['possible_causes'], '现有信息不足以判断或不适用')}\n\n"
+                f"**下一步建议**\n{bullet_list(analysis['next_steps'], '现有信息不足以给出具体建议')}\n\n"
+                f"{subdued('置信度: ' + analysis['confidence'])}"
             ),
         },
     ]
@@ -362,13 +379,13 @@ def build_card(data: Dict[str, Any], include_tail: bool) -> Dict[str, Any]:
                     "tag": "collapsible_panel",
                     "expanded": False,
                     "header": {
-                        "title": plain_text("Log Tail (last 80 lines)"),
+                        "title": plain_text("日志摘要（最后 80 行）"),
                     },
                     "elements": [
                         {
                             "tag": "div",
                             "text": lark_md(
-                                subdued("Folded by default. Full log path is listed in Meta.")
+                                subdued("默认折叠。完整 log 路径见底部。")
                                 + "\n"
                                 + code_block(data["tail_log"])
                             ),
@@ -381,9 +398,19 @@ def build_card(data: Dict[str, Any], include_tail: bool) -> Dict[str, Any]:
     elements.extend(
         [
             {"tag": "hr"},
+            section_title("运行命令"),
             {
                 "tag": "div",
-                "text": lark_md(subdued("Command") + "\n" + code_block(command, "bash")),
+                "text": lark_md(
+                    subdued("Command")
+                    + "\n"
+                    + code_block(command, "bash")
+                    + "\n"
+                    + subdued("Log Path")
+                    + f"\n`{log_path}`\n"
+                    + subdued("Summary Path")
+                    + f"\n`{summary_path}`"
+                ),
             },
         ]
     )
@@ -572,8 +599,8 @@ def main() -> int:
     parser.add_argument("--tail-log")
     args = parser.parse_args()
 
-    include_tail = True
     data = load_payload_data(args)
+    include_tail = data["status"] in {"failed", "interrupted"}
     text_message = build_text_message(data, include_tail=include_tail)
 
     mode = os.environ.get("FEISHU_NOTIFY_MODE", "card").strip().lower() or "card"

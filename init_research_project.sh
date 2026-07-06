@@ -84,7 +84,7 @@ main() {
   cat <<'EOF'
 
 Toy test commands:
-  ./tools/run_with_feishu_notify.sh --name toy_success -- bash examples/toy_success.sh
+  ./tools/run_with_feishu_notify.sh --name toy_success --note "toy success notification check" -- bash examples/toy_success.sh
   ./tools/run_with_feishu_notify.sh --name toy_failed -- bash examples/toy_failed.sh
   ./tools/run_with_feishu_notify.sh --name toy_interrupt -- bash -c "sleep 60"
 

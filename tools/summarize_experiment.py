@@ -127,12 +127,17 @@ def write_markdown(path: Path, summary: Dict[str, Any]) -> None:
     metric_lines = "\n".join(f"- {key}: {value}" for key, value in sorted(metrics.items())) or "- No metrics found"
     tail_lines = "\n".join(summary.get("log_tail") or [])
     analysis_summary = analysis.get("concise_summary", "Agent analysis pending.")
+    note = summary.get("note") or "未填写"
 
     content = f"""# Experiment Summary: {summary['experiment_name']}
 
+## Note
+
+{note}
+
 ## Facts
 
-- Status: {facts.get('status', 'unknown')}
+- Status: {summary.get('status', 'unknown')}
 - Exit code: {facts.get('exit_code', 'unknown')}
 - Signal: {facts.get('signal', 'unknown')}
 - Command: `{facts.get('command', 'unknown')}`
@@ -164,6 +169,7 @@ def main() -> int:
     parser = argparse.ArgumentParser(description=__doc__)
     parser.add_argument("--name", required=True)
     parser.add_argument("--status", required=True)
+    parser.add_argument("--note", default="")
     parser.add_argument("--log", required=True)
     parser.add_argument("--output-dir", required=True)
     parser.add_argument("--metrics-json")
@@ -182,7 +188,6 @@ def main() -> int:
 
     exit_code = metadata.get("exit_code", "unknown")
     facts = {
-        "status": args.status,
         "exit_code": exit_code,
         "signal": default_signal(args.status, exit_code, metadata),
         "command": metadata.get("command", "unknown"),
@@ -197,6 +202,8 @@ def main() -> int:
 
     summary = {
         "experiment_name": args.name,
+        "note": args.note or metadata.get("note", ""),
+        "status": args.status,
         "facts": facts,
         "metrics": metrics,
         "log_tail": extract_log_tail(log_text),

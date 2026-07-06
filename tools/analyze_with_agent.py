@@ -12,7 +12,7 @@ from pathlib import Path
 from typing import Any, Dict
 
 
-UNAVAILABLE = "Agent analysis unavailable. See facts and log tail."
+UNAVAILABLE = "Agent 分析不可用。请查看 facts 和 log tail。"
 
 
 def unavailable_analysis() -> Dict[str, Any]:
@@ -87,42 +87,60 @@ def compact_json(value: Any) -> str:
 
 
 def build_prompt(summary: Dict[str, Any]) -> str:
+    note = str(summary.get("note") or "未填写")
     facts = summary.get("facts") if isinstance(summary.get("facts"), dict) else {}
     metrics = summary.get("metrics") if isinstance(summary.get("metrics"), dict) else {}
     log_tail = summary.get("log_tail") if isinstance(summary.get("log_tail"), list) else []
     traceback = summary.get("traceback") if isinstance(summary.get("traceback"), list) else []
-    status = str(facts.get("status", "unknown"))
+    status = str(summary.get("status") or facts.get("status") or "unknown")
 
     status_instruction = {
         "success": (
-            "For success, analyze whether the result looks usable, whether metrics are worth keeping, "
-            "and whether seed repeats, ablations, or metric stability checks are needed."
+            "success 状态下，重点分析结果是否值得保留，指标是否值得记录，是否需要补 seed、ablation 或稳定性检查。"
         ),
         "failed": (
-            "For failed, classify the error type, identify possible causes from evidence only, "
-            "and propose concrete debugging steps."
+            "failed 状态下，重点分析错误类型、可能原因和具体排查步骤。"
         ),
         "interrupted": (
-            "For interrupted, only analyze whether the pre-interruption log shows anomalies. "
-            "Do not present unverified interruption causes as facts."
+            "interrupted 状态下，只分析中断前日志是否有异常，不要把未经验证的中断原因写成事实。"
         ),
-    }.get(status, "Analyze conservatively from the provided facts only.")
+    }.get(status, "请只根据提供的信息保守分析。")
 
-    return f"""You are analyzing a research experiment run from structured facts.
+    return f"""你是一个机器学习实验结果分析助手。请用中文分析本次实验。
 
-Use only the provided facts, metrics, traceback snippet, and last 80 log lines.
-Do not infer causes that are not supported by evidence. Do not request full logs unless needed.
-Return strict JSON only, with exactly these keys:
+你会收到：
+1. 用户填写的实验备注 note；
+2. wrapper 收集到的客观 facts；
+3. 提取到的 metrics；
+4. 最后 80 行 log tail；
+5. 必要时的错误或 traceback 片段。
+
+要求：
+- 只根据提供的信息分析，不要编造事实；
+- facts 是事实，不允许修改；
+- note 是用户的实验意图，不是实验结果；
+- 分析必须使用中文；
+- 如果证据不足，请明确写“现有信息不足以判断”；
+- 输出必须简洁，适合手机飞书阅读，不要写长篇报告；
+- 返回严格 JSON，不要输出 Markdown 或额外说明。
+
+返回 JSON 格式：
 {{
-  "concise_summary": "one or two sentences",
-  "evidence": ["short evidence bullets from facts/metrics/log_tail"],
-  "possible_causes": ["hypotheses, or [] if not applicable"],
-  "next_steps": ["concrete next actions"],
+  "concise_summary": "一句话中文总结",
+  "evidence": ["依据1", "依据2"],
+  "possible_causes": ["可能原因1", "可能原因2"],
+  "next_steps": ["建议1", "建议2"],
   "confidence": "low|medium|high"
 }}
 
-Status-specific instruction:
+状态专项要求：
 {status_instruction}
+
+实验备注 note：
+{note}
+
+Status:
+{status}
 
 Facts:
 {compact_json(facts)}
@@ -130,7 +148,7 @@ Facts:
 Metrics:
 {compact_json(metrics)}
 
-Traceback snippet if available:
+错误或 traceback 片段（如有）:
 {compact_json(traceback)}
 
 Log tail, last 80 lines:

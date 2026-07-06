@@ -71,14 +71,23 @@ Use:
 ./tools/run_with_feishu_notify.sh --name baseline_default -- python train.py --config configs/default.yaml
 ```
 
-The wrapper records start time, end time, duration, host, git commit, stdout/stderr log path, exit code, signal, metrics, log tail, and Agent Analysis.
+You can add an experiment note:
+
+```bash
+./tools/run_with_feishu_notify.sh \
+  --name exp_042 \
+  --note "去除 region mask 模块，验证该模块对 UF1/UAR 的贡献" \
+  -- python train.py --config configs/exp_042.yaml
+```
+
+The wrapper records the note, start time, end time, duration, host, git commit, stdout/stderr log path, exit code, signal, metrics, log tail, and Agent Analysis.
 
 ## Toy Tests
 
 After initializing a project that has the `examples/` directory, run:
 
 ```bash
-./tools/run_with_feishu_notify.sh --name toy_success -- bash examples/toy_success.sh
+./tools/run_with_feishu_notify.sh --name toy_success --note "toy success notification check" -- bash examples/toy_success.sh
 ```
 
 ```bash
@@ -153,7 +162,9 @@ experiments/summaries/<experiment_name>.summary.md
 
 `summarize_experiment.py` is fact-only. It extracts:
 
-- `facts`: status, exit code, signal, command, host, git commit, start/end time, duration, log path
+- `note`: user-provided experiment intent from `--note`
+- `status`: success, failed, or interrupted
+- `facts`: exit code, signal, command, host, git commit, start/end time, duration, log path
 - `metrics`
 - `log_tail`: last 80 log lines
 - `traceback`: short traceback/error snippet if available
@@ -177,7 +188,7 @@ If `metrics.json` or `result.json` exists, JSON metrics are preferred. Otherwise
 opencode run "<prompt>"
 ```
 
-Only facts, metrics, traceback snippets, and the last 80 log lines are sent to the agent. The analysis is written to `summary.json` under the `analysis` field and never overwrites `facts`.
+Only note, facts, metrics, traceback snippets, and the last 80 log lines are sent to the agent. The analysis is written to `summary.json` under the `analysis` field and never overwrites `facts`.
 
 The analysis schema is:
 
@@ -191,13 +202,13 @@ The analysis schema is:
 }
 ```
 
-If OpenCode is unavailable or fails, notifications still send. The analysis summary becomes:
+The prompt asks OpenCode to return concise Chinese analysis. If OpenCode is unavailable or fails, notifications still send. The analysis summary becomes:
 
 ```text
-Agent analysis unavailable. See facts and log tail.
+Agent 分析不可用。请查看 facts 和 log tail。
 ```
 
-Feishu cards show `Run Facts`, `Metrics`, `Agent Analysis`, `Log Tail`, and `Command`.
+Feishu cards show `实验备注`, `运行概览`, `核心指标`, `Agent 分析`, `日志摘要`, and `运行命令`.
 
 ## Agent Rule
 

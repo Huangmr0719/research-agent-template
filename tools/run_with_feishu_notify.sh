@@ -4,10 +4,10 @@ set -Eeuo pipefail
 usage() {
   cat <<'EOF'
 Usage:
-  ./tools/run_with_feishu_notify.sh --name EXPERIMENT_NAME -- COMMAND [ARGS...]
+  ./tools/run_with_feishu_notify.sh --name EXPERIMENT_NAME [--note NOTE] -- COMMAND [ARGS...]
 
 Example:
-  ./tools/run_with_feishu_notify.sh --name exp_042 -- python train.py --config configs/exp_042.yaml
+  ./tools/run_with_feishu_notify.sh --name exp_042 --note "Remove region mask module" -- python train.py --config configs/exp_042.yaml
 EOF
 }
 
@@ -17,6 +17,7 @@ if [[ $# -lt 3 ]]; then
 fi
 
 EXPERIMENT_NAME=""
+EXPERIMENT_NOTE=""
 while [[ $# -gt 0 ]]; do
   case "$1" in
     --name)
@@ -25,6 +26,14 @@ while [[ $# -gt 0 ]]; do
         exit 2
       fi
       EXPERIMENT_NAME="$2"
+      shift 2
+      ;;
+    --note)
+      if [[ $# -lt 2 ]]; then
+        printf 'Missing value for --note\n' >&2
+        exit 2
+      fi
+      EXPERIMENT_NOTE="$2"
       shift 2
       ;;
     --)
@@ -77,6 +86,7 @@ write_status_json() {
   STATUS_JSON="$status" \
   EXIT_CODE_JSON="$exit_code" \
   SIGNAL_JSON="$signal" \
+  NOTE_JSON="$EXPERIMENT_NOTE" \
   HOST_NAME_JSON="$HOST_NAME" \
   GIT_COMMIT_JSON="$GIT_COMMIT" \
   COMMAND_DISPLAY_JSON="$COMMAND_DISPLAY" \
@@ -92,6 +102,7 @@ import sys
 path = sys.argv[1]
 data = {
     "experiment_name": os.environ["EXPERIMENT_NAME_JSON"],
+    "note": os.environ.get("NOTE_JSON", ""),
     "status": os.environ["STATUS_JSON"],
     "exit_code": int(os.environ["EXIT_CODE_JSON"]),
     "signal": os.environ["SIGNAL_JSON"],
@@ -118,6 +129,7 @@ summarize() {
     "$SCRIPT_DIR/summarize_experiment.py"
     --name "$EXPERIMENT_NAME"
     --status "$status"
+    --note "$EXPERIMENT_NOTE"
     --log "$LOG_PATH"
     --result-json "$result_json"
     --output-dir "$SUMMARY_DIR"
@@ -190,6 +202,9 @@ trap 'interrupted SIGTERM' TERM
 
 {
   printf 'Experiment: %s\n' "$EXPERIMENT_NAME"
+  if [[ -n "$EXPERIMENT_NOTE" ]]; then
+    printf 'Note: %s\n' "$EXPERIMENT_NOTE"
+  fi
   printf 'Command: %s\n' "$COMMAND_DISPLAY"
   printf 'Host: %s\n' "$HOST_NAME"
   printf 'Git commit: %s\n' "$GIT_COMMIT"
