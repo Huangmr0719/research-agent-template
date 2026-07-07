@@ -388,6 +388,10 @@ def test_docs_and_templates() -> None:
         "opencode-sdk-evaluation.md",
     ]:
         assert (root / "docs" / doc_name).read_text(encoding="utf-8")
+    lark_eval = (root / "docs" / "opencode-lark-evaluation.md").read_text(encoding="utf-8")
+    assert "opencode-lark`" in lark_eval
+    assert "Partially usable" in lark_eval
+    assert "open_id allowlist" in lark_eval
     for command_name in [
         "experiment-run.md",
         "experiment-summary.md",
