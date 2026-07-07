@@ -1,0 +1,11 @@
+{
+  "appId": "${FEISHU_APP_ID}",
+  "appSecret": "${FEISHU_APP_SECRET}",
+  "directory": "${RCA_PROJECT_DIR}",
+  "maxHistoryMessages": 0,
+  "maxResourceSize": 52428800,
+  "dedupTtl": 600000,
+  "nudge": {
+    "enabled": false
+  }
+}

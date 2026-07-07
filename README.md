@@ -10,15 +10,16 @@
 - summary.json / summary.md
 - summary-based experiment comparison
 - minimal paper context workflow
-- Feishu-OpenCode Bridge prototype
+- opencode-feishu primary Feishu entry workflow
+- legacy Python Feishu-OpenCode Bridge fallback
 - on-demand OpenCode analysis
 - project_results_adapter（项目级 metrics 适配）
 - toy success / failed / interrupted tests
 - Feishu smoke test
 
-技术栈：bash + Python 标准库。核心实验工具无外部依赖；可选 Feishu-OpenCode Bridge 需要 Feishu Channel SDK Python（`lark-channel-sdk`）。不存储 Feishu 凭证。
+技术栈：bash + Python 标准库。核心实验工具无外部依赖；当前推荐飞书入口是 `NeverMore93/opencode-feishu` OpenCode plugin。自研 Python Feishu bridge 仅作为 legacy fallback，可能需要 Feishu Channel SDK Python（`lark-channel-sdk`）。不存储 Feishu 凭证。
 
-当前 Bridge 不做：gateway、MCP、Hermes、botmux、Vercel Chat SDK、飞书 CLI、webhook、内网穿透、飞书审批控制、多平台抽象。
+当前 RCA 不做：gateway、MCP、Hermes、botmux、Vercel Chat SDK、飞书 CLI、webhook、内网穿透、多平台抽象、Python command router。
 
 ## Install Once
 
@@ -61,9 +62,14 @@ tools/
 templates/
   PAPER_CONTEXT_TEMPLATE.md
   feishu_bridge.env.example
+  opencode-feishu.plugin.example.json
+  feishu.plugin.example.json
   systemd/
     opencode-serve.service
     rca-feishu-opencode-bridge.service
+docs/
+  opencode-feishu-adoption.md
+  opencode-feishu-throwaway-test.md
 logs/
 outputs/
 papers/
@@ -318,9 +324,42 @@ Agent 分析不可用。请查看 facts 和 log tail。
 
 Feishu cards show `实验备注`, `运行概览`, `核心指标`, `Agent 分析`, `日志摘要`, and `运行命令`.
 
-## Feishu-OpenCode Bridge Prototype
+## Primary Feishu Entry: opencode-feishu
 
-v0.5.0 adds an optional thin bridge for remote OpenCode access from Feishu:
+v0.6.5 switches the primary Feishu remote entry route to `NeverMore93/opencode-feishu`:
+
+```text
+Feishu
+  -> opencode-feishu OpenCode plugin
+  -> OpenCode natural-language workflow
+  -> Research-Code-Agent tools
+  -> Feishu CardKit reply
+```
+
+This route keeps the product boundary simple:
+
+- Feishu users speak natural language.
+- Users do not need to remember `/summary`, `/compare`, `/run`, or RCA command names.
+- OpenCode decides which RCA tool to use.
+- `.opencode/commands/` files are action templates for OpenCode, not user-facing commands.
+- Long experiments must still use `tools/run_with_feishu_notify.sh`.
+- Experiment summaries, comparison, and log analysis remain provided by RCA tools.
+
+Templates:
+
+- `templates/opencode-feishu.plugin.example.json` for `~/.config/opencode/opencode.json`
+- `templates/feishu.plugin.example.json` for `~/.config/opencode/plugins/feishu.json`
+
+See:
+
+- `docs/opencode-feishu-adoption.md`
+- `docs/opencode-feishu-throwaway-test.md`
+
+`opencode-lark` is now a historical evaluation item, not the current main route. OpenCode SDK evaluation is a backup option, not the current main route.
+
+## Legacy Python Feishu-OpenCode Bridge Fallback
+
+v0.5.0 added an optional thin bridge for remote OpenCode access from Feishu. As of v0.6.5, this is a legacy fallback route:
 
 ```text
 Feishu Channel SDK Python
@@ -344,7 +383,7 @@ Feishu
   -> Feishu static card
 ```
 
-The bridge does not implement `/status`, `/summary`, `/run`, or any Python command router. It does not use Vercel Chat SDK, `@larksuite/vercel-chat-adapter`, Feishu CLI, DingTalk MCP, webhook, public ports, tunneling, streaming progress, approval cards, MCP, Hermes, botmux, or multi-platform routing. Feishu is the only remote entrypoint. OpenCode is responsible for understanding and executing the user request.
+The legacy bridge does not implement `/status`, `/summary`, `/run`, or any Python command router. It does not use Vercel Chat SDK, `@larksuite/vercel-chat-adapter`, Feishu CLI, DingTalk MCP, webhook, public ports, tunneling, streaming progress, approval cards, MCP, Hermes, botmux, or multi-platform routing. Feishu is the only remote entrypoint. OpenCode is responsible for understanding and executing the user request.
 
 Long-running experiments must still be launched through:
 
@@ -354,16 +393,16 @@ Long-running experiments must still be launched through:
 
 ### OpenCode-Native Simplification Strategy
 
-v0.6.1 stops expanding the self-written bridge as the main product direction. The preferred strategy is:
+v0.6.5 stops treating the self-written bridge, `opencode-lark`, or OpenCode SDK as the main product direction. The preferred strategy is:
 
 1. Users keep speaking natural language in Feishu.
 2. Users do not need to remember `/summary`, `/compare`, `/run`, or other command syntax.
 3. OpenCode should understand the task and choose the right RCA tool.
 4. RCA tools remain the stable experiment toolbox.
 5. `AGENTS.md`, `.opencode/commands/`, `opencode.json`, and permissions define OpenCode behavior.
-6. Evaluate `opencode-lark` or similar existing Feishu/Lark integrations before adding bridge code.
-7. Keep the Python bridge as a fallback transport.
-8. If the Python bridge must remain, consider an official OpenCode SDK before maintaining handwritten HTTP calls.
+6. Use `NeverMore93/opencode-feishu` as the primary Feishu entry.
+7. Keep the Python bridge as a legacy fallback transport.
+8. Treat `opencode-lark` as historical evaluation and OpenCode SDK as a backup option.
 
 The `.opencode/commands/` files are OpenCode action templates. They are not user-facing commands. A Feishu user can still say “看最近实验”, “比较最近两次”, “跑一下 toy_success”, or “分析失败原因”.
 
@@ -371,6 +410,8 @@ See:
 
 - `docs/opencode-native-simplification.md`
 - `docs/opencode-native-smoke-test.md`
+- `docs/opencode-feishu-adoption.md`
+- `docs/opencode-feishu-throwaway-test.md`
 - `docs/opencode-lark-evaluation.md`
 - `docs/opencode-lark-throwaway-test.md`
 - `docs/opencode-sdk-evaluation.md`

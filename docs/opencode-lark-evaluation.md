@@ -1,20 +1,24 @@
 # OpenCode Lark/Feishu Integration Evaluation
 
+Historical evaluation: as of v0.6.5 this is no longer the primary Feishu entry route. The current primary route is `NeverMore93/opencode-feishu`; this document is retained as background for why `opencode-lark` was not adopted.
+
 Goal: decide whether the community package `opencode-lark` can replace further maintenance of the custom Python Feishu bridge.
 
 Evaluation date: 2026-07-07
 
 ## Conclusion
 
-**B. Partially usable / 部分可用.**
+**B+ / real Feishu end-to-end partially works, but replacement is blocked by a cardid issue.**
 
 `opencode-lark` is a real maintained package and covers much of the Feishu/Lark to OpenCode entry layer: Feishu WebSocket long connection, text/group message handling, OpenCode session mapping, SSE streaming, card replies, interactive permission/question cards, and attachment download.
 
-It should be treated as the primary replacement candidate for the Feishu entry layer, but it is **not ready to replace the current Python bridge without a security review and one real Feishu smoke test**. The main gaps for Research-Code-Agent are open_id allowlist enforcement, explicit audit/redaction behavior, narrower permission/card scope, systemd deployment expectations, and compatibility with the project's "natural language, no command router required" workflow.
+It is **not the current main route**. The main gaps for Research-Code-Agent were open_id allowlist enforcement, explicit audit/redaction behavior, narrower permission/card scope, systemd deployment expectations, and a real Feishu card/tool-progress compatibility issue.
 
-Do not expand the custom Python bridge while this candidate remains viable. Keep the Python bridge as fallback until `opencode-lark` passes a real deployment test with RCA tools.
+Do not expand the custom Python bridge because of this document. Use `opencode-feishu` as the primary Feishu entry route and keep the Python bridge as legacy fallback.
 
-v0.6.4 update: the local throwaway test verified installation, `opencode serve`, OpenCode health, and `opencode-lark` startup through the OpenCode/SSE/database phases. The real Feishu end-to-end test was blocked because no configured throwaway Feishu App credentials and no installed test bot/chat were available in that run. See `docs/opencode-lark-throwaway-test.md`.
+v0.6.5 update: Research-Code-Agent is switching the primary Feishu entry route to `NeverMore93/opencode-feishu`. `opencode-lark` remains a historical evaluation item.
+
+v0.6.4 update: the local throwaway test verified installation, `opencode serve`, OpenCode health, and `opencode-lark` startup through the OpenCode/SSE/database phases. A later real Feishu supplemental test confirmed that `opencode-lark` can receive real Feishu messages, connect to local OpenCode, start an OpenCode session, generate a prompt response for "帮我总结最近一次实验结果", and send a final streaming card reply. The new blocker is `opencode-lark`'s tool-start/tool-progress card path: Feishu returned `230099 - Failed to create card content`, nested `ErrCode: 11310; ErrMsg: cardid is invalid`, followed by `card start for tool failed: Error: sendMessage returned no message_id`. See `docs/opencode-lark-throwaway-test.md`.
 
 ## What Was Verified
 
@@ -47,7 +51,7 @@ npm install opencode-lark@0.2.2 --ignore-scripts
 
 The package installed successfully. The CLI does not expose a conventional `--help`; it starts config loading and fails early if Feishu credentials are missing. This is acceptable for a daemon-style tool, but the README should remain the source of deployment steps.
 
-Real Feishu end-to-end was **not** run in this evaluation pass. The result is based on npm metadata, README inspection, installed source inspection, and local CLI probing.
+Real Feishu end-to-end has now been partially tested. The main message path works, but tool-progress card creation can fail with `cardid is invalid`.
 
 ## Capability Matrix
 
@@ -145,7 +149,7 @@ Some of these can be handled outside the package with OpenCode permissions, Linu
 | Runtime | Python stdlib + Channel SDK | Bun/Node + package dependencies |
 | Deployment docs in RCA | Existing systemd templates | Would need new docs/templates |
 | Maintenance burden | Owned code, more to maintain | Less owned Feishu/OpenCode glue, more third-party behavior to validate |
-| Replacement readiness | Stable fallback | Candidate, not yet production default |
+| Replacement readiness | Stable fallback | Candidate, but blocked by tool-progress card compatibility and security gaps |
 
 ## Existing Package Alternatives Found
 

@@ -5,6 +5,7 @@ from __future__ import annotations
 
 import asyncio
 import os
+import re
 import tempfile
 from pathlib import Path
 
@@ -356,6 +357,8 @@ def test_docs_and_templates() -> None:
     agents = (root / "templates" / "AGENTS.md").read_text(encoding="utf-8")
     env_example = (root / "templates" / "feishu_bridge.env.example").read_text(encoding="utf-8")
     opencode_example = (root / "templates" / "opencode.remote.example.json").read_text(encoding="utf-8")
+    opencode_feishu_plugin = (root / "templates" / "opencode-feishu.plugin.example.json").read_text(encoding="utf-8")
+    feishu_plugin = (root / "templates" / "feishu.plugin.example.json").read_text(encoding="utf-8")
     service_text = "\n".join(
         [
             (root / "templates" / "systemd" / "opencode-serve.service").read_text(encoding="utf-8"),
@@ -376,6 +379,10 @@ def test_docs_and_templates() -> None:
     assert "BRIDGE_REPLY_FORMAT=card" in env_example
     assert "BRIDGE_PROCESSED_MESSAGE_RETENTION_DAYS=7" in env_example
     assert "feishu_bridge.env" in opencode_example
+    assert '"plugin": ["opencode-feishu"]' in opencode_feishu_plugin
+    assert "${FEISHU_APP_ID}" in feishu_plugin
+    assert "${FEISHU_APP_SECRET}" in feishu_plugin
+    assert '"maxHistoryMessages": 0' in feishu_plugin
     assert "network-online.target" in service_text
     assert "Restart=always" in service_text
     assert "127.0.0.1" in service_text
@@ -384,18 +391,31 @@ def test_docs_and_templates() -> None:
     for doc_name in [
         "opencode-native-simplification.md",
         "opencode-native-smoke-test.md",
+        "opencode-feishu-adoption.md",
+        "opencode-feishu-throwaway-test.md",
         "opencode-lark-evaluation.md",
         "opencode-lark-throwaway-test.md",
         "opencode-sdk-evaluation.md",
     ]:
         assert (root / "docs" / doc_name).read_text(encoding="utf-8")
+    assert "opencode-feishu primary Feishu entry workflow" in readme
+    assert "legacy Python Feishu-OpenCode Bridge fallback" in readme
+    adoption = (root / "docs" / "opencode-feishu-adoption.md").read_text(encoding="utf-8")
+    assert "NeverMore93/opencode-feishu" in adoption
+    assert "Python bridge remains available as a fallback" in adoption
+    throwaway_feishu = (root / "docs" / "opencode-feishu-throwaway-test.md").read_text(encoding="utf-8")
+    assert "读取 feishu.json" in throwaway_feishu
+    assert "群聊未 @bot 消息" in throwaway_feishu
     lark_eval = (root / "docs" / "opencode-lark-evaluation.md").read_text(encoding="utf-8")
     assert "opencode-lark`" in lark_eval
-    assert "Partially usable" in lark_eval
+    assert "Historical evaluation" in lark_eval
+    assert "B+" in lark_eval
+    assert "cardid is invalid" in lark_eval
     assert "open_id allowlist" in lark_eval
     throwaway_eval = (root / "docs" / "opencode-lark-throwaway-test.md").read_text(encoding="utf-8")
-    assert "blocked before real Feishu end-to-end" in throwaway_eval
-    assert "invalid appId" in throwaway_eval
+    assert "B+" in throwaway_eval
+    assert "cardid is invalid" in throwaway_eval
+    assert "sendMessage returned no message_id" in throwaway_eval
     for command_name in [
         "experiment-run.md",
         "experiment-summary.md",
@@ -404,6 +424,18 @@ def test_docs_and_templates() -> None:
     ]:
         command_text = (root / ".opencode" / "commands" / command_name).read_text(encoding="utf-8")
         assert "Do not ask the user to type this command name." in command_text
+
+    tracked_text = "\n".join(
+        p.read_text(encoding="utf-8")
+        for p in list((root / "docs").glob("*.md"))
+        + list((root / "templates").glob("*.json"))
+        + [root / "README.md", root / "templates" / "AGENTS.md"]
+    )
+    for app_id in re.findall(r"\bcli_[A-Za-z0-9]{8,}\b", tracked_text):
+        suffix = app_id[4:]
+        assert set(suffix) <= {"x"} or "fake" in app_id.lower(), f"possible real Feishu App ID committed: {app_id}"
+    for secret_value in re.findall(r'"appSecret"\s*:\s*"([^"]+)"', tracked_text):
+        assert secret_value.startswith("${") or set(secret_value) <= {"x"}, "possible real Feishu appSecret committed"
 
 
 async def test_healthcheck(tmpdir: str) -> None:

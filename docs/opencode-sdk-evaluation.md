@@ -1,6 +1,8 @@
 # OpenCode SDK Evaluation
 
-The SDK is a backup simplification path. It is not the first priority. First priority is OpenCode-native workflow plus an existing Feishu/Lark integration if one is usable.
+Fallback option: as of v0.6.5 this is not the primary Feishu route. The current primary route is `NeverMore93/opencode-feishu`; SDK work is only a backup if the plugin route fails and the legacy Python bridge is not sufficient.
+
+The SDK is a backup simplification path. It is not the first priority.
 
 ## Questions
 

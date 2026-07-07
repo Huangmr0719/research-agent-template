@@ -118,9 +118,13 @@ main() {
   require_file "$SCRIPT_DIR/templates/README_AGENT_WORKFLOW.md"
   require_file "$SCRIPT_DIR/templates/PAPER_CONTEXT_TEMPLATE.md"
   require_file "$SCRIPT_DIR/templates/feishu_bridge.env.example"
+  require_file "$SCRIPT_DIR/templates/opencode-feishu.plugin.example.json"
+  require_file "$SCRIPT_DIR/templates/feishu.plugin.example.json"
   require_file "$SCRIPT_DIR/templates/opencode.remote.example.json"
   require_file "$SCRIPT_DIR/templates/systemd/opencode-serve.service"
   require_file "$SCRIPT_DIR/templates/systemd/rca-feishu-opencode-bridge.service"
+  require_file "$SCRIPT_DIR/docs/opencode-feishu-adoption.md"
+  require_file "$SCRIPT_DIR/docs/opencode-feishu-throwaway-test.md"
   require_file "$SCRIPT_DIR/.opencode/commands/experiment-run.md"
   require_file "$SCRIPT_DIR/.opencode/commands/experiment-summary.md"
   require_file "$SCRIPT_DIR/.opencode/commands/experiment-compare.md"
@@ -147,6 +151,7 @@ main() {
   ensure_dir "$TARGET_DIR/experiments/summaries"
   ensure_dir "$TARGET_DIR/experiments/runs"
   ensure_dir "$TARGET_DIR/examples"
+  ensure_dir "$TARGET_DIR/docs"
   ensure_dir "$TARGET_DIR/.opencode/commands"
 
   copy_generic_tools
@@ -159,9 +164,13 @@ main() {
   copy_file "$SCRIPT_DIR/templates/README_AGENT_WORKFLOW.md" "$TARGET_DIR/README_AGENT_WORKFLOW.md"
   copy_file "$SCRIPT_DIR/templates/PAPER_CONTEXT_TEMPLATE.md" "$TARGET_DIR/templates/PAPER_CONTEXT_TEMPLATE.md"
   copy_file "$SCRIPT_DIR/templates/feishu_bridge.env.example" "$TARGET_DIR/templates/feishu_bridge.env.example"
+  copy_file "$SCRIPT_DIR/templates/opencode-feishu.plugin.example.json" "$TARGET_DIR/templates/opencode-feishu.plugin.example.json"
+  copy_file "$SCRIPT_DIR/templates/feishu.plugin.example.json" "$TARGET_DIR/templates/feishu.plugin.example.json"
   copy_file "$SCRIPT_DIR/templates/opencode.remote.example.json" "$TARGET_DIR/templates/opencode.remote.example.json"
   copy_file "$SCRIPT_DIR/templates/systemd/opencode-serve.service" "$TARGET_DIR/templates/systemd/opencode-serve.service"
   copy_file "$SCRIPT_DIR/templates/systemd/rca-feishu-opencode-bridge.service" "$TARGET_DIR/templates/systemd/rca-feishu-opencode-bridge.service"
+  copy_file "$SCRIPT_DIR/docs/opencode-feishu-adoption.md" "$TARGET_DIR/docs/opencode-feishu-adoption.md"
+  copy_file "$SCRIPT_DIR/docs/opencode-feishu-throwaway-test.md" "$TARGET_DIR/docs/opencode-feishu-throwaway-test.md"
   copy_file "$SCRIPT_DIR/.opencode/commands/experiment-run.md" "$TARGET_DIR/.opencode/commands/experiment-run.md"
   copy_file "$SCRIPT_DIR/.opencode/commands/experiment-summary.md" "$TARGET_DIR/.opencode/commands/experiment-summary.md"
   copy_file "$SCRIPT_DIR/.opencode/commands/experiment-compare.md" "$TARGET_DIR/.opencode/commands/experiment-compare.md"
@@ -196,7 +205,10 @@ Toy test commands:
 
 For Feishu delivery, configure an installed Feishu CLI or set FEISHU_CLI_SEND_COMMAND.
 
-Optional Feishu-OpenCode Bridge prototype:
+Recommended Feishu remote entry:
+  See docs/opencode-feishu-adoption.md and templates/opencode-feishu.plugin.example.json.
+
+Legacy Python Feishu-OpenCode Bridge fallback:
   See README.md and templates/feishu_bridge.env.example.
 EOF
   fi

@@ -1,5 +1,7 @@
 # OpenCode-Native Simplification
 
+v0.6.5 update: the current primary Feishu entry route is `NeverMore93/opencode-feishu`. The custom Python bridge is legacy fallback, `opencode-lark` is historical evaluation, and OpenCode SDK work is a backup option.
+
 v0.6.1 changes the strategy: stop expanding the Python bridge unless there is a clear deployment bug. Prefer OpenCode-native instructions, permissions, commands, agents, tools, and existing integrations.
 
 ## Direct Answers

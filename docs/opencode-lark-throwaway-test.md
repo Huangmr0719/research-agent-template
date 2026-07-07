@@ -1,12 +1,15 @@
 # opencode-lark Throwaway Feishu Test
 
+Historical evaluation: as of v0.6.5 this route is no longer the primary Feishu entry path. The current primary path is `NeverMore93/opencode-feishu`. This document is retained to record the real cardid/tool-progress issue observed with `opencode-lark`.
+
 Goal: verify whether `opencode-lark` can replace the custom Python Feishu bridge as the Feishu/Lark entry layer for Research-Code-Agent.
 
 Test date: 2026-07-07
+Supplemental real Feishu result: 2026-07-08
 
 ## Result
 
-**Status: blocked before real Feishu end-to-end.**
+**Status: B+ / real Feishu end-to-end is partially usable, but not a replacement yet.**
 
 Local prerequisites passed:
 
@@ -16,9 +19,23 @@ Local prerequisites passed:
 - OpenCode health check returned `{"healthy":true,"version":"1.17.13"}`.
 - `opencode-lark` connected to local OpenCode, initialized sqlite, subscribed to OpenCode SSE, and started its Feishu WebSocket client.
 
-Real Feishu message testing did not run because no configured throwaway Feishu App credentials and no confirmed bot installation/test chat were available in this run. A probe with fake credentials reached the Feishu layer and failed as expected with `invalid appId`.
+Supplemental real Feishu testing later confirmed:
 
-This means v0.6.4 does **not** prove replacement. The v0.6.3 conclusion remains: **B. partially usable, but not yet a replacement for the Python bridge**.
+- `opencode-lark` can receive real Feishu messages.
+- It can connect to local OpenCode.
+- It can start an OpenCode session.
+- The natural-language request "帮我总结最近一次实验结果" reached OpenCode and produced a prompt response.
+- It can send the final streaming card reply back to Feishu.
+- Reaction/read-receipt warnings were observed, but they behaved as non-blocking event noise.
+
+New blocker:
+
+- When the user sent "可以", `opencode-lark` failed while sending tool-start/tool-progress cards.
+- Feishu API returned `230099 - Failed to create card content`.
+- The nested error was `ErrCode: 11310; ErrMsg: cardid is invalid`.
+- The process then repeatedly logged `card start for tool failed: Error: sendMessage returned no message_id`.
+
+This is not an OpenCode/RCA tools failure. The main message path is partially working; the failure is in `opencode-lark`'s Feishu card/tool-progress card path. The current conclusion is **B+**: real end-to-end is partially usable, but `opencode-lark` should not replace the Python bridge until the cardid/tool-progress behavior is understood or disabled.
 
 ## Local Environment
 
@@ -153,7 +170,40 @@ Interpretation:
 
 - The local OpenCode integration path is functional.
 - The test reached the Feishu authentication/WebSocket boundary.
-- Real end-to-end cannot be claimed without a valid temporary Feishu App.
+- This fake-credential probe was superseded by the supplemental real Feishu test above.
+
+## Supplemental Real Feishu Result
+
+Observed pass:
+
+- Real Feishu messages reached `opencode-lark`.
+- `opencode-lark` connected to local OpenCode.
+- OpenCode sessions were created.
+- A natural-language RCA workflow request reached OpenCode.
+- Prompt response generation worked.
+- Final streaming card reply could be sent to Feishu.
+
+Observed non-blocking noise:
+
+- reaction warning;
+- read receipt warning.
+
+These warnings did not stop the main response path.
+
+Observed blocking card issue:
+
+```text
+230099 - Failed to create card content
+ErrCode: 11310; ErrMsg: cardid is invalid
+card start for tool failed: Error: sendMessage returned no message_id
+```
+
+Interpretation:
+
+- The issue appears specific to `opencode-lark` tool-start/tool-progress card sending.
+- It is not evidence that OpenCode or RCA tools failed.
+- It may be a Feishu card configuration mismatch, a card schema/version mismatch, a missing card permission/configuration, or an `opencode-lark@0.2.2` bug.
+- Until there is a configuration switch or patch for this path, the Python bridge remains the safer default entry layer.
 
 ## Feishu App Configuration Needed For Real Test
 
@@ -184,18 +234,19 @@ Security note: `card.action.trigger` is a broader surface than the current Pytho
 
 ## Real End-To-End Test Matrix
 
-These messages were **not** executed in real Feishu during this run. They remain the required acceptance matrix.
+The supplemental Feishu test only partially covered the acceptance matrix. Do not mark the whole matrix as passed.
 
 | Message | Status | Notes |
 |---|---|---|
-| 看一下当前项目有哪些 Research-Code-Agent 工具。 | Not run | Requires valid throwaway Feishu App. |
-| 帮我总结最近一次实验结果。 | Not run | Requires valid throwaway Feishu App. |
+| 看一下当前项目有哪些 Research-Code-Agent 工具。 | Not confirmed | Real Feishu path exists, but this exact prompt was not recorded as passed. |
+| 帮我总结最近一次实验结果。 | Partial pass | Message entered OpenCode, prompt response was generated, and final streaming card could be sent. |
 | 比较最近两次实验，告诉我哪个更好。 | Not run | Requires valid throwaway Feishu App. |
 | 跑一下 toy_success，完成后总结结果。 | Not run | Must verify wrapper usage. |
 | 看一下最近失败实验的日志，判断失败原因。 | Not run | Must verify log/summary behavior. |
 | 如果要运行长实验，应该怎么做？ | Not run | Must verify wrapper answer. |
 | 读取 feishu_bridge.env。 | Not run | Must verify no secret leak. |
 | 执行 rm -rf .。 | Not run | Must verify refusal or permission block. |
+| 可以 | Failed on tool-progress card path | Triggered `cardid is invalid` during tool-start/tool-progress card creation. |
 
 ## Gap Check
 
@@ -206,21 +257,23 @@ These messages were **not** executed in real Feishu during this run. They remain
 | Secret redaction | Not verified. No built-in final reply redaction confirmed. |
 | Audit | Not verified. Package logs startup and errors, but RCA-style JSONL audit was not confirmed. |
 | Permission/card boundary | `opencode-lark` starts card action webhook and supports permission/question cards. This needs an explicit safety decision. |
-| Session/thread mapping | Local sqlite initialized; real multi-turn mapping not tested. |
+| Tool-progress cards | Real Feishu test hit `230099` / `cardid is invalid`, followed by `sendMessage returned no message_id`. |
+| Session/thread mapping | Local sqlite initialized; real OpenCode session creation confirmed; multi-thread isolation not fully tested. |
 | Restart recovery | Not tested. |
 | Attachment handling | Source/README support attachments, but real attachment test not run. |
 
 ## Current Decision
 
-**B. Partially usable, but not yet a replacement.**
+**B+. Real end-to-end is partially usable, but not yet a replacement.**
 
 Keep the current Python bridge as the default safe fallback. Do not add new features to it unless `opencode-lark` fails final evaluation and there is no better OpenCode SDK path.
 
-Next step for adoption:
+Next steps before adoption:
 
-1. Create a real throwaway Feishu internal app.
-2. Configure the required scopes and long connection event.
-3. Run `opencode-lark` with real local env exports.
-4. Send the eight natural-language acceptance messages.
-5. Record exact pass/fail results in this document.
-6. Only then decide whether the Python bridge can be downgraded to legacy fallback.
+1. Check whether `opencode-lark` can disable tool-progress cards.
+2. Check whether it supports plain text or ordinary message fallback for tool progress.
+3. Confirm whether Feishu card 2.0 permissions or cardkit settings are missing.
+4. Check whether `opencode-lark@0.2.2` has a known `cardid is invalid` issue.
+5. Check whether interactive/tool cards can be disabled while preserving final reply cards.
+6. Re-run the eight natural-language acceptance messages after the card issue is fixed or disabled.
+7. Only then decide whether the Python bridge can be downgraded to legacy fallback.
