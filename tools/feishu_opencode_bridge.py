@@ -14,6 +14,7 @@ import asyncio
 import base64
 import json
 import os
+import re
 import socket
 import sqlite3
 import sys
@@ -26,6 +27,8 @@ from dataclasses import dataclass
 from pathlib import Path
 from typing import Any, Optional
 
+from feishu_card_renderer import render_static_reply_card
+
 
 DEFAULT_OPENCODE_URL = "http://127.0.0.1:4096"
 DEFAULT_ACK = "收到，处理中。"
@@ -33,6 +36,7 @@ DEFAULT_BUSY = "当前会话已有任务处理中，请稍后再试。"
 DEFAULT_UNAVAILABLE = "OpenCode 调用失败，请查看 bridge 日志。"
 DEFAULT_TIMEOUT = "处理超时，已尝试中止当前 OpenCode 会话任务，请到服务器检查日志。"
 DISPLAY_TEXT_FALLBACK = "OpenCode 已完成处理，但没有返回可展示文本。"
+VALID_REPLY_FORMATS = {"card", "markdown"}
 DEFAULT_SYSTEM_PROMPT = (
     "你是 Research-Code-Agent 远程助手。你运行在用户的科研代码服务器上。"
     "你只根据当前项目文件和用户消息工作；不要编造执行结果。"
@@ -61,6 +65,7 @@ class BridgeConfig:
     opencode_agent: str
     opencode_model_provider: str
     opencode_model_id: str
+    reply_format: str
 
 
 class BridgeError(RuntimeError):
@@ -78,8 +83,35 @@ class OpenCodeTimeoutError(BridgeError):
     pass
 
 
+class OpenCodeSessionNotFound(BridgeError):
+    pass
+
+
 class OpenCodeUnavailableError(BridgeError):
     pass
+
+
+def redact_sensitive_text(text: str) -> str:
+    output = str(text or "")
+    patterns = [
+        re.compile(r"Bearer\s+[A-Za-z0-9._~+/=-]{8,}", re.IGNORECASE),
+        re.compile(r"sk-[A-Za-z0-9][A-Za-z0-9_-]{9,}"),
+        re.compile(r"\b(?:AKIA|ASIA)[A-Z0-9]{16}\b"),
+        re.compile(r"\bghp_[A-Za-z0-9_]{20,}\b"),
+        re.compile(r"\bgithub_pat_[A-Za-z0-9_]{20,}\b"),
+        re.compile(
+            r"-----BEGIN (?:RSA |OPENSSH )?PRIVATE KEY-----.*?-----END (?:RSA |OPENSSH )?PRIVATE KEY-----",
+            re.DOTALL,
+        ),
+    ]
+    for pattern in patterns:
+        output = pattern.sub("[REDACTED]", output)
+    output = re.sub(
+        r"(?im)(^|[ \t])([A-Z0-9_]*(?:APP_SECRET|KEY|TOKEN|SECRET|PASSWORD)[A-Z0-9_]*\s*=\s*)([^\s#]+)",
+        r"\1\2[REDACTED]",
+        output,
+    )
+    return output
 
 
 def load_env_file(path: str) -> None:
@@ -113,6 +145,7 @@ def load_config() -> BridgeConfig:
         for item in allowed_env.split(",")
         if item.strip()
     }
+    reply_format = os.environ.get("BRIDGE_REPLY_FORMAT", "card").strip().lower() or "card"
     config = BridgeConfig(
         app_id=os.environ.get("LARK_APP_ID") or os.environ.get("FEISHU_APP_ID", ""),
         app_secret=os.environ.get("LARK_APP_SECRET") or os.environ.get("FEISHU_APP_SECRET", ""),
@@ -133,6 +166,7 @@ def load_config() -> BridgeConfig:
         opencode_agent=os.environ.get("OPENCODE_AGENT", ""),
         opencode_model_provider=os.environ.get("OPENCODE_MODEL_PROVIDER", ""),
         opencode_model_id=os.environ.get("OPENCODE_MODEL_ID", ""),
+        reply_format=reply_format,
     )
     missing = []
     if not config.app_id:
@@ -145,6 +179,8 @@ def load_config() -> BridgeConfig:
         missing.append("OPENCODE_BASE_URL must use http://127.0.0.1:<port>")
     if missing:
         raise BridgeError("missing or invalid config: " + ", ".join(missing))
+    if config.reply_format not in VALID_REPLY_FORMATS:
+        raise BridgeError("BRIDGE_REPLY_FORMAT must be card or markdown")
     return config
 
 
@@ -235,7 +271,6 @@ class MessageStore:
                 (chat_id, session_id, now, now),
             )
 
-
 class OpenCodeClient:
     def __init__(self, config: BridgeConfig):
         self.config = config
@@ -321,6 +356,10 @@ class OpenCodeClient:
         payload: dict[str, Any] = {"parts": [{"type": "text", "text": prompt}]}
         try:
             data = self._request("POST", f"/session/{session_id}/message", payload, timeout=timeout)
+        except OpenCodeHttpError as exc:
+            if is_session_not_found_error(exc):
+                raise OpenCodeSessionNotFound(str(exc)) from exc
+            raise
         except OpenCodeTimeoutError:
             self.abort_session(session_id)
             raise
@@ -420,6 +459,11 @@ class OpenCodeClient:
         return data
 
 
+def is_session_not_found_error(exc: OpenCodeHttpError) -> bool:
+    details = (exc.details or "").lower()
+    return exc.status_code == 404 or "session not found" in details or "invalid session" in details
+
+
 class ChatLockRegistry:
     def __init__(self) -> None:
         self._global = threading.Lock()
@@ -486,35 +530,36 @@ class BridgeApp:
 
         try:
             result = await asyncio.to_thread(self._process_message, message_id, chat_id, open_id, text)
-            for index, chunk in enumerate(chunk_text(result, self.config.chunk_chars), start=1):
-                prefix = f"[{index}] " if index > 1 else ""
-                await self._safe_send(chat_id, message_id, prefix + chunk)
+            await self._send_result(chat_id, message_id, result)
             self.store.update_message_status(message_id, "success")
             self._audit("success", message_id, chat_id, open_id)
         except OpenCodeTimeoutError as exc:
             print("bridge processing timed out:", exc, file=sys.stderr)
             self.store.update_message_status(message_id, "timeout", str(exc))
             self._audit("timeout", message_id, chat_id, open_id, str(exc))
-            await self._safe_send(chat_id, message_id, self.config.timeout_text)
+            await self._send_notice(chat_id, message_id, self.config.timeout_text, "timeout")
         except OpenCodeUnavailableError as exc:
             print("OpenCode unavailable:", exc, file=sys.stderr)
             self.store.update_message_status(message_id, "opencode_unavailable", str(exc))
             self._audit("opencode_unavailable", message_id, chat_id, open_id, str(exc))
-            await self._safe_send(chat_id, message_id, "OpenCode 服务不可用，请检查 opencode serve。")
+            await self._send_notice(chat_id, message_id, "OpenCode 服务不可用，请检查 opencode serve。", "error")
         except Exception as exc:  # noqa: BLE001 - bridge must report failures to Feishu.
             print("bridge processing failed:", exc, file=sys.stderr)
             traceback.print_exc()
             self.store.update_message_status(message_id, "failed", str(exc))
             self._audit("failed", message_id, chat_id, open_id, str(exc))
-            await self._safe_send(chat_id, message_id, self.config.unavailable_text)
+            await self._send_notice(chat_id, message_id, self.config.unavailable_text, "error")
         finally:
             lock.release()
 
     async def _safe_send(self, chat_id: str, message_id: str, text: str) -> bool:
+        return await self._send_markdown(chat_id, message_id, text)
+
+    async def _send_markdown(self, chat_id: str, message_id: str, text: str) -> bool:
         try:
             result = await self.channel.send(
                 chat_id,
-                {"markdown": text},
+                {"markdown": redact_sensitive_text(text)},
                 {"reply_to": message_id},
             )
             if hasattr(result, "success") and result.success is False:
@@ -523,6 +568,43 @@ class BridgeApp:
         except Exception as exc:  # noqa: BLE001 - Feishu delivery failure should not crash callbacks.
             print(f"Feishu reply failed for message_id={message_id}: {exc}", file=sys.stderr)
             return False
+
+    async def _send_card(self, chat_id: str, message_id: str, text: str, status: str = "normal") -> bool:
+        try:
+            card = render_static_reply_card(
+                title=None,
+                content=redact_sensitive_text(text),
+                status=status,
+                tags=["OpenCode", "RCA"],
+            )
+            result = await self.channel.send(
+                chat_id,
+                {"card": card},
+                {"reply_to": message_id},
+            )
+            if hasattr(result, "success") and result.success is False:
+                raise BridgeError(f"Feishu card send failed: {getattr(result, 'error', '')}")
+            return True
+        except Exception as exc:  # noqa: BLE001 - card failure falls back to markdown.
+            print(f"Feishu card reply failed for message_id={message_id}: {exc}", file=sys.stderr)
+            self._audit("card_send_failed", message_id, chat_id, "", str(exc))
+            return False
+
+    async def _send_result(self, chat_id: str, message_id: str, text: str) -> None:
+        redacted = redact_sensitive_text(text)
+        chunks = chunk_text(redacted, self.config.chunk_chars)
+        if self.config.reply_format == "card" and len(redacted) <= 6000:
+            if await self._send_card(chat_id, message_id, redacted, status="normal"):
+                return
+        for index, chunk in enumerate(chunks, start=1):
+            prefix = f"[{index}] " if index > 1 else ""
+            await self._send_markdown(chat_id, message_id, prefix + chunk)
+
+    async def _send_notice(self, chat_id: str, message_id: str, text: str, status: str) -> None:
+        if self.config.reply_format == "card":
+            if await self._send_card(chat_id, message_id, text, status=status):
+                return
+        await self._send_markdown(chat_id, message_id, text)
 
     def _process_message(
         self,
@@ -534,15 +616,29 @@ class BridgeApp:
         self.store.update_message_status(message_id, "processing")
         session_id = self.store.get_chat_session(chat_id)
         if not session_id:
-            session_id = self.opencode.create_session(title=f"feishu:{chat_id}")
-            self.store.save_chat_session(chat_id, session_id)
+            session_id = self._create_and_save_session(chat_id)
         context = {"message_id": message_id, "chat_id": chat_id, "open_id": open_id}
-        return self.opencode.send_message(
-            session_id,
-            text,
-            context,
-            timeout=self.config.timeout_seconds,
-        )
+        try:
+            return self.opencode.send_message(
+                session_id,
+                text,
+                context,
+                timeout=self.config.timeout_seconds,
+            )
+        except OpenCodeSessionNotFound:
+            self._audit("session_recreated", message_id, chat_id, open_id, session_id)
+            session_id = self._create_and_save_session(chat_id)
+            return self.opencode.send_message(
+                session_id,
+                text,
+                context,
+                timeout=self.config.timeout_seconds,
+            )
+
+    def _create_and_save_session(self, chat_id: str) -> str:
+        session_id = self.opencode.create_session(title=f"feishu:{chat_id}")
+        self.store.save_chat_session(chat_id, session_id)
+        return session_id
 
     def _audit(self, status: str, message_id: str, chat_id: str, open_id: str, error: str = "") -> None:
         Path(self.config.log_path).parent.mkdir(parents=True, exist_ok=True)

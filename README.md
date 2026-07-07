@@ -329,7 +329,7 @@ Feishu Channel SDK Python
   -> per-chat lock
   -> immediate "收到，处理中。"
   -> local OpenCode server at 127.0.0.1:4096
-  -> chunked Feishu text replies
+  -> static Feishu card replies, with markdown fallback
 ```
 
 The bridge does not implement `/status`, `/summary`, `/run`, or any Python command router. It does not use Vercel Chat SDK, `@larksuite/vercel-chat-adapter`, Feishu CLI, DingTalk MCP, webhook, public ports, tunneling, streaming progress, approval cards, MCP, Hermes, botmux, or multi-platform routing. Feishu is the only remote entrypoint. OpenCode is responsible for understanding and executing the user request.
@@ -371,6 +371,8 @@ When `OPENCODE_SERVER_PASSWORD` is set, OpenCode protects the HTTP API with Basi
 
 The bridge stores `chat_id -> session_id` in sqlite, so a Feishu chat can continue using the same OpenCode session after the bridge restarts. If a request times out, the bridge calls `POST /session/{sessionID}/abort` and replies with a timeout notice.
 
+If `opencode serve` restarts and the stored session no longer exists, the bridge recreates the OpenCode session for that `chat_id`, updates sqlite, and retries the current message once. It does not retry indefinitely.
+
 ### Bridge Configuration
 
 Copy the example env file to a private location:
@@ -395,6 +397,7 @@ RCA_PROJECT_DIR=/path/to/baseline-project
 BRIDGE_DB_PATH=/path/to/baseline-project/logs/feishu_opencode_bridge.sqlite3
 BRIDGE_LOG_PATH=/path/to/baseline-project/logs/feishu_opencode_bridge.jsonl
 BRIDGE_TIMEOUT_SECONDS=600
+BRIDGE_REPLY_FORMAT=card
 ```
 
 The copied env file is private configuration and must not be committed.
@@ -415,6 +418,29 @@ The bridge prompt is only a behavior hint, not a security boundary. Real restric
 - keeping `opencode serve` bound to `127.0.0.1`.
 
 Use a restricted service user if the server is shared. Do not give OpenCode write access to datasets, checkpoints, private credentials, or unrelated projects unless needed.
+
+### Reply Safety and Cards
+
+v0.5.3 defaults to static Feishu cards for final OpenCode replies:
+
+```bash
+BRIDGE_REPLY_FORMAT=card
+```
+
+Set this to markdown if card sending is incompatible with the current Feishu tenant or SDK behavior:
+
+```bash
+BRIDGE_REPLY_FORMAT=markdown
+```
+
+The card mode is static display only. It does not use buttons, card callbacks, streaming updates, approval actions, or command values. If card sending fails, the bridge automatically falls back to markdown/text replies so the user still receives the result.
+
+The bridge applies two separate safety filters before replying to Feishu:
+
+- OpenCode part filtering avoids structural leakage from `reasoning`, `thinking`, `tool`, `tool_result`, `system`, `debug`, and internal message parts.
+- `redact_sensitive_text` reduces content leakage in the final visible reply by replacing common tokens, API keys, private key blocks, and secret-like env lines with `[REDACTED]`.
+
+Audit logs are local troubleshooting material. They are not sent back to Feishu, are ignored by Git, and should be protected with normal file permissions.
 
 ### systemd Deployment
 
@@ -454,7 +480,7 @@ python3 tools/feishu_opencode_bridge.py --env feishu_bridge.env
 - Duplicate `message_id` values are skipped via sqlite.
 - The same `chat_id` can process only one message at a time.
 - If a chat is busy, the bridge replies with a short busy message.
-- OpenCode output is split into Feishu text chunks.
+- OpenCode output is sent as a static Feishu card by default; long output or card failures fall back to Feishu text chunks.
 - If OpenCode times out or fails, the bridge replies with a short failure message and logs the exception.
 - The bridge only forwards text messages in this prototype.
 

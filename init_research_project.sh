@@ -83,6 +83,7 @@ copy_generic_tools() {
   copy_file "$SCRIPT_DIR/tools/test_feishu_notify.sh" "$TARGET_DIR/tools/test_feishu_notify.sh"
   copy_file "$SCRIPT_DIR/tools/init_paper_context.sh" "$TARGET_DIR/tools/init_paper_context.sh"
   copy_file "$SCRIPT_DIR/tools/feishu_opencode_bridge.py" "$TARGET_DIR/tools/feishu_opencode_bridge.py"
+  copy_file "$SCRIPT_DIR/tools/feishu_card_renderer.py" "$TARGET_DIR/tools/feishu_card_renderer.py"
   copy_file "$SCRIPT_DIR/tools/test_feishu_opencode_bridge.py" "$TARGET_DIR/tools/test_feishu_opencode_bridge.py"
 
   chmod +x "$TARGET_DIR/tools/run_with_feishu_notify.sh"
@@ -93,6 +94,7 @@ copy_generic_tools() {
   chmod +x "$TARGET_DIR/tools/test_feishu_notify.sh"
   chmod +x "$TARGET_DIR/tools/init_paper_context.sh"
   chmod +x "$TARGET_DIR/tools/feishu_opencode_bridge.py"
+  chmod +x "$TARGET_DIR/tools/feishu_card_renderer.py"
   chmod +x "$TARGET_DIR/tools/test_feishu_opencode_bridge.py"
 }
 
@@ -110,6 +112,7 @@ main() {
   require_file "$SCRIPT_DIR/tools/test_feishu_notify.sh"
   require_file "$SCRIPT_DIR/tools/init_paper_context.sh"
   require_file "$SCRIPT_DIR/tools/feishu_opencode_bridge.py"
+  require_file "$SCRIPT_DIR/tools/feishu_card_renderer.py"
   require_file "$SCRIPT_DIR/tools/test_feishu_opencode_bridge.py"
   require_file "$SCRIPT_DIR/templates/AGENTS.md"
   require_file "$SCRIPT_DIR/templates/README_AGENT_WORKFLOW.md"
